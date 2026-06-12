@@ -1,0 +1,85 @@
+plugins {
+    id 'java-library'
+    id 'groovy'
+    id 'com.gradleup.shadow' version '9.0.0-beta12'
+}
+
+group = 'io.percy'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['stubs']
+        }
+        groovy {
+            srcDirs = ['Keywords', 'Libs']
+        }
+    }
+}
+
+dependencies {
+    // Groovy -- provided by Katalon at runtime, needed for compilation
+    compileOnly 'org.apache.groovy:groovy-all:4.0.24'
+
+    // Percy Java Selenium SDK -- bundled into the fat JAR
+    implementation 'io.percy:percy-java-selenium:2.1.1'
+
+    // Selenium -- provided by Katalon at runtime, do NOT bundle
+    compileOnly 'org.seleniumhq.selenium:selenium-java:4.5.3'
+
+    // Katalon API stubs are compiled from stubs/ source set (real classes provided by Katalon at runtime)
+
+    // Test dependencies
+    testImplementation 'org.apache.groovy:groovy-all:4.0.24'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+
+    // Selenium needed at test time too
+    testImplementation 'org.seleniumhq.selenium:selenium-java:4.5.3'
+
+    // Katalon stubs compiled from main java sourceset, available at test time automatically
+}
+
+// Fixed port for the test HTTP server that simulates Percy CLI
+def testPercyPort = 5339
+
+test {
+    useJUnitPlatform()
+    jvmArgs '-XX:+EnableDynamicAgentLoading'
+    // Percy SDK reads PERCY_SERVER_ADDRESS from env in a static initializer,
+    // so we must set it before the JVM loads the Percy class
+    environment 'PERCY_SERVER_ADDRESS', "http://127.0.0.1:${testPercyPort}"
+    systemProperty 'test.percy.port', testPercyPort
+}
+
+shadowJar {
+    // Exclude Selenium entirely -- Katalon bundles its own version
+    dependencies {
+        exclude(dependency('org.seleniumhq.selenium:.*'))
+    }
+
+    // Relocate transitive dependencies to avoid classpath conflicts with Katalon
+    relocate 'org.apache.http', 'com.percy.katalon.shaded.org.apache.http'
+    relocate 'org.apache.commons.logging', 'com.percy.katalon.shaded.org.apache.commons.logging'
+    relocate 'org.apache.commons.codec', 'com.percy.katalon.shaded.org.apache.commons.codec'
+    relocate 'org.json', 'com.percy.katalon.shaded.org.json'
+
+    // Exclude Katalon API stubs (only needed for compilation, Katalon provides real classes)
+    exclude 'com/kms/**'
+
+    // Exclude test temp classes
+    exclude 'Temp*.class'
+
+    archiveClassifier.set('')
+}
