@@ -147,7 +147,8 @@ class PercyKeywords {
      *   boundingBox (Map)       - {x: int, y: int, width: int, height: int}
      *   elementXpath (String)   - XPath selector for the element
      *   elementCSS (String)     - CSS selector for the element
-     *   padding (Integer)       - padding around the region in pixels
+     *   padding (Integer|Map)    - padding around the region. Integer applies to all sides,
+     *                              or Map with keys: top, bottom, left, right
      *   algorithm (String)      - comparison algorithm: "ignore", "standard", "layout", "intelliignore"
      *   diffSensitivity (Number)      - diff sensitivity (for standard/intelliignore)
      *   imageIgnoreThreshold (Number) - image ignore threshold (for standard/intelliignore)
@@ -181,9 +182,15 @@ class PercyKeywords {
         if (params.elementCSS) elementSelector.elementCSS = params.elementCSS
         region.elementSelector = elementSelector
 
-        // Padding
+        // Padding -- CLI expects an object {top, bottom, left, right}, not a plain integer
         if (params.padding != null) {
-            region.padding = params.padding
+            if (params.padding instanceof Map) {
+                region.padding = params.padding
+            } else {
+                // Convenience: integer applies to all sides
+                int p = params.padding as int
+                region.padding = [top: p, bottom: p, left: p, right: p]
+            }
         }
 
         // Configuration (only for standard and intelliignore algorithms)

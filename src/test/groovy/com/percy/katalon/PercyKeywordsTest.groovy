@@ -290,7 +290,11 @@ class PercyKeywordsTest {
         ])
 
         assertEquals('ignore', region.algorithm)
-        assertEquals(10, region.padding)
+        // Padding integer is expanded to {top, bottom, left, right} object
+        assertEquals(10, region.padding.top)
+        assertEquals(10, region.padding.bottom)
+        assertEquals(10, region.padding.left)
+        assertEquals(10, region.padding.right)
         assertEquals(0, region.elementSelector.boundingBox.x)
         assertEquals(200, region.elementSelector.boundingBox.width)
     }
@@ -301,14 +305,14 @@ class PercyKeywordsTest {
         def region = PercyKeywords.createRegion([
             elementXpath: '//div[@id="content"]',
             algorithm: 'standard',
-            diffSensitivity: 3,
+            diffSensitivity: 2,
             imageIgnoreThreshold: 0.2,
             carouselsEnabled: true
         ])
 
         assertEquals('standard', region.algorithm)
         assertEquals('//div[@id="content"]', region.elementSelector.elementXpath)
-        assertEquals(3, region.configuration.diffSensitivity)
+        assertEquals(2, region.configuration.diffSensitivity)
         assertEquals(0.2, region.configuration.imageIgnoreThreshold)
         assertTrue(region.configuration.carouselsEnabled)
     }
@@ -352,6 +356,21 @@ class PercyKeywordsTest {
 
     @Test
     @Order(18)
+    void testCreateRegionPaddingAsMap() {
+        def region = PercyKeywords.createRegion([
+            elementCSS: '.sidebar',
+            algorithm: 'ignore',
+            padding: [top: 5, bottom: 10, left: 15, right: 20]
+        ])
+
+        assertEquals(5, region.padding.top)
+        assertEquals(10, region.padding.bottom)
+        assertEquals(15, region.padding.left)
+        assertEquals(20, region.padding.right)
+    }
+
+    @Test
+    @Order(19)
     void testCreateRegionNoConfigForIgnoreAlgorithm() {
         def region = PercyKeywords.createRegion([
             elementCSS: '.ignore-me',
@@ -363,7 +382,7 @@ class PercyKeywordsTest {
     }
 
     @Test
-    @Order(19)
+    @Order(20)
     void testSnapshotWithRegions() {
         def ignoreRegion = PercyKeywords.createRegion([
             elementCSS: '.dynamic-ad',
@@ -372,7 +391,7 @@ class PercyKeywordsTest {
         def considerRegion = PercyKeywords.createRegion([
             elementCSS: '.main-content',
             algorithm: 'standard',
-            diffSensitivity: 5
+            diffSensitivity: 3
         ])
 
         PercyKeywords.percySnapshot("Page With Regions", [
@@ -390,7 +409,7 @@ class PercyKeywordsTest {
     // -------------------------------------------------------------------
 
     @Test
-    @Order(20)
+    @Order(21)
     void testDualChannelLoggingOnNullDriver() {
         driverFactoryMock.when(DriverFactory::getWebDriver).thenReturn(null)
         PercyKeywords.percySnapshot("Log Test")
