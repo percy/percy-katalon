@@ -405,11 +405,42 @@ class PercyKeywordsTest {
     }
 
     // -------------------------------------------------------------------
-    // Dual-channel logging tests
+    // Responsive capture tests
     // -------------------------------------------------------------------
 
     @Test
     @Order(21)
+    void testSnapshotWithResponsiveCapture() {
+        // responsiveSnapshotCapture triggers SDK-internal viewport resizing which
+        // requires a real browser. With our mock, it fails gracefully and returns null.
+        // This test verifies the option doesn't crash the plugin.
+        def result = PercyKeywords.percySnapshot("Responsive Page", [
+            responsiveSnapshotCapture: true,
+            widths: [375, 768, 1280]
+        ])
+        // May be null (SDK can't resize mock driver) — that's OK, no crash is the test
+        // Real responsive capture is validated in the manual Katalon test
+    }
+
+    @Test
+    @Order(22)
+    void testSnapshotWithMinHeight() {
+        PercyKeywords.percySnapshot("Tall Page", [
+            widths: [375, 1280],
+            minHeight: 1200
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("minHeight"))
+        assertTrue(body.contains("1200"))
+    }
+
+    // -------------------------------------------------------------------
+    // Dual-channel logging tests
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(23)
     void testDualChannelLoggingOnNullDriver() {
         driverFactoryMock.when(DriverFactory::getWebDriver).thenReturn(null)
         PercyKeywords.percySnapshot("Log Test")

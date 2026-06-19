@@ -37,6 +37,9 @@ dependencies {
     // Selenium -- provided by Katalon at runtime, do NOT bundle
     compileOnly 'org.seleniumhq.selenium:selenium-java:4.5.3'
 
+    // Cucumber — provided by Katalon at runtime (for BDD step definitions)
+    compileOnly 'io.cucumber:cucumber-java:7.15.0'
+
     // Katalon API stubs are compiled from stubs/ source set (real classes provided by Katalon at runtime)
 
     // Test dependencies
