@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseEntity>
+   <description>Test sync mode: snapshot blocks until processing complete and returns structured response</description>
+   <name>Sync Mode</name>
+   <tag></tag>
+   <comment></comment>
+   <recordOption>OTHER</recordOption>
+   <testCaseGuid>00000000-0000-0000-0000-000000000042</testCaseGuid>
+</TestCaseEntity>

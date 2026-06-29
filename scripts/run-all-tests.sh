@@ -181,7 +181,7 @@ check_prereqs
 # ==================================================
 # TEST 1: Dual Channel Logging
 # ==================================================
-echo -e "${YELLOW}[Test 1/3] Dual Channel Logging${NC}"
+echo -e "${YELLOW}[Test 1/7] Dual Channel Logging${NC}"
 echo "  Starting Percy CLI..."
 start_percy
 
@@ -206,7 +206,7 @@ echo ""
 # ==================================================
 # TEST 2: Responsive Capture
 # ==================================================
-echo -e "${YELLOW}[Test 2/3] Responsive Capture${NC}"
+echo -e "${YELLOW}[Test 2/7] Responsive Capture${NC}"
 echo "  Starting Percy CLI..."
 start_percy
 
@@ -237,7 +237,7 @@ echo ""
 # ==================================================
 # TEST 3: All 8 Region Types (baseline → approve → diff)
 # ==================================================
-echo -e "${YELLOW}[Test 3/3] Region Types (8 scenarios)${NC}"
+echo -e "${YELLOW}[Test 3/7] Region Types (8 scenarios)${NC}"
 
 # --- Phase A: Baseline ---
 echo "  Phase A: Taking 8 baseline snapshots..."
@@ -293,6 +293,325 @@ post_snapshot "Region - Padding Map" "$DIFF_HTML" "$R" && record "Region: Paddin
 # 8. Multiple Combined
 R='[{"algorithm":"ignore","elementSelector":{"elementCSS":"h1"}},{"algorithm":"standard","elementSelector":{"elementCSS":"p"},"configuration":{"diffSensitivity":3},"assertion":{"diffIgnoreThreshold":0.1}},{"algorithm":"ignore","elementSelector":{"elementCSS":"a"}}]'
 post_snapshot "Region - Multiple Combined" "$DIFF_HTML" "$R" && record "Region: Multiple Combined" "PASS" "3 regions sent" || record "Region: Multiple Combined" "FAIL" "rejected"
+
+stop_percy
+echo ""
+
+# ==================================================
+# TEST 4: Snapshot Options
+# ==================================================
+echo -e "${YELLOW}[Test 4/7] Snapshot Options${NC}"
+echo "  Starting Percy CLI..."
+start_percy
+
+echo "  4a. percyCSS"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - percyCSS',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'percyCSS': 'body { background-color: purple; } h1 { color: white; }'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: percyCSS" "PASS" "percyCSS option sent"
+else
+    record "Options: percyCSS" "FAIL" "rejected: $resp"
+fi
+
+echo "  4b. domTransformation"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - domTransformation',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'domTransformation': \"(doc) => doc.querySelector('h1').textContent = 'Transformed Title';\"
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: domTransformation" "PASS" "domTransformation sent"
+else
+    record "Options: domTransformation" "FAIL" "rejected: $resp"
+fi
+
+echo "  4c. scope"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - scope',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'scope': 'div'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: scope" "PASS" "scope option sent"
+else
+    record "Options: scope" "FAIL" "rejected: $resp"
+fi
+
+echo "  4d. enableJavaScript + enableLayout"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - JS and Layout',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'enableJavaScript': True,
+    'enableLayout': True
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: JS + Layout" "PASS" "enableJavaScript + enableLayout sent"
+else
+    record "Options: JS + Layout" "FAIL" "rejected: $resp"
+fi
+
+echo "  4e. labels"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - labels',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'labels': 'smoke,regression,options-test'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: labels" "PASS" "labels sent"
+else
+    record "Options: labels" "FAIL" "rejected: $resp"
+fi
+
+echo "  4f. Combined options"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - Combined',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'widths': [768, 992, 1200],
+    'minHeight': 800,
+    'percyCSS': 'header { display: none; }',
+    'scope': 'body',
+    'enableJavaScript': True,
+    'labels': 'combined-test'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: Combined" "PASS" "multiple options combined"
+else
+    record "Options: Combined" "FAIL" "rejected: $resp"
+fi
+
+echo "  4g. disableShadowDom"
+OPTS_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Options - disableShadowDom',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'disableShadowDom': True
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$OPTS_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Options: disableShadowDom" "PASS" "disableShadowDom sent"
+else
+    record "Options: disableShadowDom" "FAIL" "rejected: $resp"
+fi
+
+stop_percy
+echo ""
+
+# ==================================================
+# TEST 5: Multiple Snapshots
+# ==================================================
+echo -e "${YELLOW}[Test 5/7] Multiple Snapshots${NC}"
+echo "  Starting Percy CLI..."
+start_percy
+
+MODIFIED_HTML='<!DOCTYPE html><html><head><title>Example</title><style>body{font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 20px}h1{font-size:2em;color:blue}p{font-size:1em;line-height:1.5}a{color:blue}</style></head><body><h1>Modified Title</h1><p>This domain is for use in illustrative examples. You may use it without prior coordination.</p><p><a href="https://www.iana.org/domains/example">More information...</a></p></body></html>'
+
+echo "  5a. First snapshot on same page"
+if post_snapshot "Multi - Same Page First" "$BASELINE_HTML"; then
+    record "Multi: Same Page First" "PASS" "first snapshot sent"
+else
+    record "Multi: Same Page First" "FAIL" "rejected"
+fi
+
+echo "  5b. Second snapshot on same page"
+if post_snapshot "Multi - Same Page Second" "$BASELINE_HTML"; then
+    record "Multi: Same Page Second" "PASS" "second snapshot sent"
+else
+    record "Multi: Same Page Second" "FAIL" "rejected"
+fi
+
+echo "  5c. After DOM change"
+if post_snapshot "Multi - After DOM Change" "$MODIFIED_HTML"; then
+    record "Multi: After DOM Change" "PASS" "modified DOM snapshot sent"
+else
+    record "Multi: After DOM Change" "FAIL" "rejected"
+fi
+
+echo "  5d. Second page"
+SECOND_PAGE_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Multi - Second Page',
+    'url': 'https://example.com/?page=2',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$SECOND_PAGE_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Multi: Second Page" "PASS" "different URL snapshot sent"
+else
+    record "Multi: Second Page" "FAIL" "rejected: $resp"
+fi
+
+echo "  5e. Back to first page"
+if post_snapshot "Multi - Back to First Page" "$BASELINE_HTML"; then
+    record "Multi: Back to First Page" "PASS" "return navigation snapshot sent"
+else
+    record "Multi: Back to First Page" "FAIL" "rejected"
+fi
+
+stop_percy
+echo ""
+
+# ==================================================
+# TEST 6: Sync Mode
+# ==================================================
+echo -e "${YELLOW}[Test 6/7] Sync Mode${NC}"
+echo "  Starting Percy CLI..."
+start_percy
+
+echo "  6a. Basic sync snapshot"
+SYNC_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Sync - Basic',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'sync': True
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$SYNC_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); assert d['success']" 2>/dev/null; then
+    record "Sync: Basic" "PASS" "sync snapshot accepted"
+else
+    record "Sync: Basic" "FAIL" "rejected: $resp"
+fi
+
+echo "  6b. Sync with options"
+SYNC_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Sync - With Options',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'sync': True,
+    'widths': [375, 1280],
+    'percyCSS': 'body { margin: 0; }'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$SYNC_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; d=json.loads(sys.stdin.read()); assert d['success']" 2>/dev/null; then
+    record "Sync: With Options" "PASS" "sync + options accepted"
+else
+    record "Sync: With Options" "FAIL" "rejected: $resp"
+fi
+
+stop_percy
+echo ""
+
+# ==================================================
+# TEST 7: Discovery Options
+# ==================================================
+echo -e "${YELLOW}[Test 7/7] Discovery Options${NC}"
+echo "  Starting Percy CLI..."
+start_percy
+
+echo "  7a. allowedHostnames"
+DISC_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Discovery - Allowed Hostnames',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'discovery': {'allowedHostnames': ['cdn.example.com', 'assets.example.com']}
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$DISC_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Discovery: allowedHostnames" "PASS" "discovery option sent"
+else
+    record "Discovery: allowedHostnames" "FAIL" "rejected: $resp"
+fi
+
+echo "  7b. Discovery combined with options"
+DISC_PAYLOAD=$(python3 -c "
+import json
+p = {
+    'name': 'Discovery - Combined',
+    'url': 'https://example.com',
+    'domSnapshot': {'html': '''${BASELINE_HTML}''', 'cookies': []},
+    'clientInfo': 'percy-katalon/1.0.0',
+    'environmentInfo': 'percy-java-selenium/2.1.1',
+    'discovery': {'allowedHostnames': ['cdn.example.com']},
+    'widths': [375, 1280],
+    'percyCSS': 'iframe { border: none; }'
+}
+print(json.dumps(p))
+")
+resp=$(curl -s -X POST ${PERCY_URL}/percy/snapshot -H "Content-Type: application/json" -d "$DISC_PAYLOAD" 2>&1)
+if echo "$resp" | python3 -c "import sys,json; assert json.loads(sys.stdin.read())['success']" 2>/dev/null; then
+    record "Discovery: Combined" "PASS" "discovery + options sent"
+else
+    record "Discovery: Combined" "FAIL" "rejected: $resp"
+fi
 
 stop_percy
 echo ""

@@ -50,6 +50,63 @@ CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Homepage', [
 ])
 ```
 
+### Sync Mode
+
+Use `sync: true` to block until Percy finishes processing and get a structured response.
+
+**Warning:** `sync: true` blocks the HTTP call until Percy's servers finish rendering. This can take 1-2 minutes or more. For local testing, consider using `sync: false` to verify the option passes through without blocking.
+
+```groovy
+// Non-blocking — validates sync option is accepted
+CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Quick Check', [
+    sync: false
+])
+
+// Blocking — waits for full render pipeline to complete
+def result = CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Homepage', [
+    sync: true
+])
+println "Snapshot result: ${result}"
+// Returns structured response with snapshot-name, status, screenshots
+```
+
+### DOM Transformation
+
+Transform the DOM before Percy captures it:
+
+```groovy
+CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Transformed Page', [
+    domTransformation: "(documentElement) => documentElement.querySelector('h1').textContent = 'Static Title';"
+])
+```
+
+### Discovery Options (Cross-Origin Iframes)
+
+Allow Percy to capture cross-origin iframes by specifying allowed hostnames:
+
+```groovy
+CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Page with Iframes', [
+    discovery: [allowedHostnames: ['cdn.example.com', 'assets.example.com']]
+])
+```
+
+### Multiple Snapshots
+
+Take multiple snapshots on the same page (e.g., before and after DOM changes):
+
+```groovy
+WebUI.openBrowser('https://your-app.com')
+
+// Snapshot initial state
+CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Page - Initial')
+
+// Modify DOM
+WebUI.executeJavaScript("document.querySelector('h1').textContent = 'Changed';", null)
+
+// Snapshot modified state
+CustomKeywords.'com.percy.katalon.PercyKeywords.percySnapshot'('Page - After Change')
+```
+
 All options reference:
 
 | Option | Type | Description |
@@ -67,6 +124,7 @@ All options reference:
 | `testCase` | `String` | Test case ID |
 | `domTransformation` | `String` | JS to transform DOM |
 | `regions` | `List<Map>` | Region configs |
+| `discovery` | `Map` | Discovery options (e.g., `allowedHostnames`) |
 
 ## 3. Snapshot with Regions
 

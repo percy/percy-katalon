@@ -2,7 +2,7 @@ import com.kms.katalon.core.webui.keyword.WebUiBuiltInKeywords as WebUI
 
 // Expects Percy CLI running on localhost:5338
 
-WebUI.openBrowser('https://example.com')
+WebUI.openBrowser('https://percy-test-webpages.netlify.app/responsive-capture')
 WebUI.delay(2)
 
 // Test 1: Explicit widths
