@@ -116,13 +116,34 @@ pause() {
 }
 
 # -------------------------------------------------------------------
+# Java detection
+# -------------------------------------------------------------------
+
+ensure_java_home() {
+    if [ -n "${JAVA_HOME:-}" ]; then
+        return
+    fi
+    # Auto-detect JAVA_HOME
+    if [ "$(uname)" = "Darwin" ] && /usr/libexec/java_home >/dev/null 2>&1; then
+        JAVA_HOME=$(/usr/libexec/java_home)
+    elif command -v java >/dev/null 2>&1; then
+        JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(which java)")")")
+    fi
+    if [ -z "${JAVA_HOME:-}" ]; then
+        echo -e "  ${RED}JAVA_HOME not set and could not be auto-detected. Set it manually.${NC}"
+        exit 1
+    fi
+    export JAVA_HOME
+    echo -e "  ${DIM}Auto-detected JAVA_HOME: ${JAVA_HOME}${NC}"
+}
+
+# -------------------------------------------------------------------
 # Build JAR
 # -------------------------------------------------------------------
 
 build_jar() {
     echo -e "  Building plugin JAR..."
-    JAVA_HOME="${JAVA_HOME:-/Users/sudiptasen/Library/Java/JavaVirtualMachines/corretto-17.0.12/Contents/Home}"
-    export JAVA_HOME
+    ensure_java_home
 
     # Ensure Gradle wrapper JAR exists
     if [ ! -f "${PROJECT_DIR}/gradle/wrapper/gradle-wrapper.jar" ]; then
@@ -149,8 +170,7 @@ build_jar() {
 
 run_unit_tests() {
     echo -e "  Running unit tests..."
-    JAVA_HOME="${JAVA_HOME:-/Users/sudiptasen/Library/Java/JavaVirtualMachines/corretto-17.0.12/Contents/Home}"
-    export JAVA_HOME
+    ensure_java_home
     local output
     output=$(cd "$PROJECT_DIR" && ./gradlew test 2>&1)
     if echo "$output" | grep -q "BUILD SUCCESSFUL"; then
