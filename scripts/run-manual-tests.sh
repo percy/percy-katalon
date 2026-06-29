@@ -116,14 +116,42 @@ pause() {
 }
 
 # -------------------------------------------------------------------
+# Java detection
+# -------------------------------------------------------------------
+
+ensure_java_home() {
+    if [ -n "${JAVA_HOME:-}" ]; then
+        return
+    fi
+    # Auto-detect JAVA_HOME
+    if [ "$(uname)" = "Darwin" ] && /usr/libexec/java_home >/dev/null 2>&1; then
+        JAVA_HOME=$(/usr/libexec/java_home)
+    elif command -v java >/dev/null 2>&1; then
+        JAVA_HOME=$(dirname "$(dirname "$(readlink -f "$(which java)")")")
+    fi
+    if [ -z "${JAVA_HOME:-}" ]; then
+        echo -e "  ${RED}JAVA_HOME not set and could not be auto-detected. Set it manually.${NC}"
+        exit 1
+    fi
+    export JAVA_HOME
+    echo -e "  ${DIM}Auto-detected JAVA_HOME: ${JAVA_HOME}${NC}"
+}
+
+# -------------------------------------------------------------------
 # Build JAR
 # -------------------------------------------------------------------
 
 build_jar() {
     echo -e "  Building plugin JAR..."
-    JAVA_HOME="${JAVA_HOME:-/Users/sudiptasen/Library/Java/JavaVirtualMachines/corretto-17.0.12/Contents/Home}"
-    export JAVA_HOME
-    (cd "$PROJECT_DIR" && gradle shadowJar -q 2>&1) || { echo -e "  ${RED}Build failed${NC}"; exit 1; }
+    ensure_java_home
+
+    # Ensure Gradle wrapper JAR exists
+    if [ ! -f "${PROJECT_DIR}/gradle/wrapper/gradle-wrapper.jar" ]; then
+        echo -e "  ${DIM}Generating Gradle wrapper...${NC}"
+        (cd "$PROJECT_DIR" && gradle wrapper -q 2>&1) || true
+    fi
+
+    (cd "$PROJECT_DIR" && ./gradlew shadowJar -q 2>&1) || { echo -e "  ${RED}Build failed${NC}"; exit 1; }
 
     JAR_FILE=$(ls -1 "${PROJECT_DIR}/build/libs/percy-katalon-"*.jar 2>/dev/null | head -1)
     if [ -z "$JAR_FILE" ]; then
@@ -134,6 +162,74 @@ build_jar() {
     mkdir -p "${KATALON_TESTS_DIR}/Plugins"
     cp "$JAR_FILE" "${KATALON_TESTS_DIR}/Plugins/"
     echo -e "  ${GREEN}✓ JAR built and copied to katalon-tests/Plugins/${NC}"
+}
+
+# -------------------------------------------------------------------
+# Run unit tests
+# -------------------------------------------------------------------
+
+run_unit_tests() {
+    echo -e "  Running unit tests..."
+    ensure_java_home
+    local output
+    output=$(cd "$PROJECT_DIR" && ./gradlew test 2>&1)
+    if echo "$output" | grep -q "BUILD SUCCESSFUL"; then
+        local count
+        count=$(echo "$output" | grep -oE '[0-9]+ tests completed' | head -1 || echo "all")
+        echo -e "  ${GREEN}✓ Unit tests passed (${count})${NC}"
+    else
+        echo -e "  ${RED}✗ Unit tests failed${NC}"
+        echo "$output" | grep -E "FAILED|Error" | head -10
+        echo ""
+        read -p "  Continue anyway? (y/N) " yn
+        if [[ ! "$yn" =~ ^[Yy] ]]; then
+            exit 1
+        fi
+    fi
+}
+
+# -------------------------------------------------------------------
+# Generate Katalon .tc metadata files
+# -------------------------------------------------------------------
+
+generate_test_cases() {
+    local tc_dir="${KATALON_TESTS_DIR}/Test Cases"
+    local scripts_dir="${KATALON_TESTS_DIR}/Scripts"
+    local guid_counter=10
+    local generated=0
+
+    mkdir -p "$tc_dir"
+
+    for script_dir in "$scripts_dir"/*/; do
+        local name
+        name=$(basename "$script_dir")
+        local tc_file="${tc_dir}/${name}.tc"
+
+        if [ ! -f "$tc_file" ] && [ -f "${script_dir}Script1.groovy" ]; then
+            local guid
+            guid=$(printf "00000000-0000-0000-0000-%012d" $guid_counter)
+            cat > "$tc_file" <<TCEOF
+<?xml version="1.0" encoding="UTF-8"?>
+<TestCaseEntity>
+   <description>${name}</description>
+   <name>${name}</name>
+   <tag></tag>
+   <comment></comment>
+   <testCaseGuid>${guid}</testCaseGuid>
+</TestCaseEntity>
+TCEOF
+            generated=$((generated + 1))
+            guid_counter=$((guid_counter + 1))
+        else
+            guid_counter=$((guid_counter + 1))
+        fi
+    done
+
+    if [ $generated -gt 0 ]; then
+        echo -e "  ${GREEN}✓ Generated ${generated} missing .tc file(s)${NC}"
+    else
+        echo -e "  ${GREEN}✓ All .tc files present${NC}"
+    fi
 }
 
 # -------------------------------------------------------------------
@@ -154,10 +250,14 @@ echo -e "${YELLOW}━━━ STEP 0: Credentials ━━━${NC}"
 echo ""
 collect_credentials
 
-# Step 1: Build
-echo -e "${YELLOW}━━━ STEP 1: Build Plugin JAR ━━━${NC}"
+# Step 1: Build + Test + Setup
+echo -e "${YELLOW}━━━ STEP 1: Build, Test & Setup ━━━${NC}"
 echo ""
 build_jar
+echo ""
+run_unit_tests
+echo ""
+generate_test_cases
 echo ""
 
 # Step 2: Open Katalon
@@ -170,9 +270,9 @@ echo "  (File > Open Project > select the katalon-tests folder)"
 pause "Open the project in Katalon Studio, then press ENTER"
 
 # ==================================================================
-# PHASE 1: Baseline Build
+# PHASE 1: Baseline Build (28 snapshots)
 # ==================================================================
-echo -e "${YELLOW}━━━ PHASE 1: Baseline Build (12 snapshots) ━━━${NC}"
+echo -e "${YELLOW}━━━ PHASE 1: Baseline Build (29 snapshots) ━━━${NC}"
 echo ""
 
 # Set All Regions Test to baseline mode
@@ -187,10 +287,10 @@ BASELINE_BUILD_ID=$BUILD_ID
 BASELINE_BUILD_URL=$BUILD_URL
 echo ""
 
-echo "  Run these 3 tests in Katalon Studio (in order):"
+echo "  Run these 7 tests in Katalon Studio (in order):"
 echo ""
 echo -e "  ${BOLD}1. Dual Channel Logging${NC}"
-echo -e "     ${DIM}Expected: [1/3] null, [2/3] snapshot, [3/3] null${NC}"
+echo -e "     ${DIM}Expected: [1/3] null, [2/3] snapshot, [3/3] null (screenshot on web mode)${NC}"
 echo ""
 echo -e "  ${BOLD}2. Responsive Capture${NC}"
 echo -e "     ${DIM}Expected: [1/3] [2/3] [3/3] snapshots taken${NC}"
@@ -198,8 +298,20 @@ echo ""
 echo -e "  ${BOLD}3. All Regions Test${NC}"
 echo -e "     ${DIM}Expected: Mode: BASELINE, [1/8] through [8/8] Done${NC}"
 echo ""
+echo -e "  ${BOLD}4. Snapshot Options${NC}"
+echo -e "     ${DIM}Expected: [1/7] through [7/7] snapshots with various options${NC}"
+echo ""
+echo -e "  ${BOLD}5. Multiple Snapshots${NC}"
+echo -e "     ${DIM}Expected: [1/5] through [5/5] snapshots on same/different pages${NC}"
+echo ""
+echo -e "  ${BOLD}6. Sync Mode${NC}"
+echo -e "     ${DIM}Expected: [1/3] [2/3] fast, [3/3] blocks until render completes (may take 1-2 min)${NC}"
+echo ""
+echo -e "  ${BOLD}7. Discovery Options${NC}"
+echo -e "     ${DIM}Expected: [1/2] [2/2] snapshots with discovery options${NC}"
+echo ""
 
-pause "Run all 3 tests in Katalon Studio, then press ENTER"
+pause "Run all 7 tests in Katalon Studio, then press ENTER"
 
 stop_percy
 echo ""
@@ -230,19 +342,50 @@ echo -e "${YELLOW}━━━ PHASE 3: Verify Baseline on Dashboard ━━━${NC}
 echo ""
 echo "  Dashboard: ${BASELINE_BUILD_URL}"
 echo ""
-echo "  Verify 12 snapshots:"
-echo "    • Log - Valid Snapshot              (Dual Channel Logging)"
-echo "    • Responsive - Explicit Widths      (Responsive Capture)"
-echo "    • Responsive - Client Side          (Responsive Capture)"
-echo "    • Responsive - MinHeight            (Responsive Capture)"
-echo "    • Region - Ignore CSS               (All Regions Test)"
-echo "    • Region - Ignore XPath             (All Regions Test)"
-echo "    • Region - BoundingBox              (All Regions Test)"
-echo "    • Region - Standard                 (All Regions Test)"
-echo "    • Region - Intelliignore            (All Regions Test)"
-echo "    • Region - Padding Integer          (All Regions Test)"
-echo "    • Region - Padding Map              (All Regions Test)"
-echo "    • Region - Multiple Combined        (All Regions Test)"
+echo "  Verify 29 snapshots:"
+echo ""
+echo "    ${BOLD}Dual Channel Logging (1 snapshot):${NC}"
+echo "    • Log - Valid Snapshot"
+echo ""
+echo "    ${BOLD}Responsive Capture (3 snapshots):${NC}"
+echo "    • Responsive - Explicit Widths"
+echo "    • Responsive - Client Side"
+echo "    • Responsive - MinHeight"
+echo ""
+echo "    ${BOLD}All Regions Test (8 snapshots):${NC}"
+echo "    • Region - Ignore CSS"
+echo "    • Region - Ignore XPath"
+echo "    • Region - BoundingBox"
+echo "    • Region - Standard"
+echo "    • Region - Intelliignore"
+echo "    • Region - Padding Integer"
+echo "    • Region - Padding Map"
+echo "    • Region - Multiple Combined"
+echo ""
+echo "    ${BOLD}Snapshot Options (7 snapshots):${NC}"
+echo "    • Options - percyCSS              (purple background)"
+echo "    • Options - domTransformation     (title text changed)"
+echo "    • Options - scope                 (scoped to div)"
+echo "    • Options - JS and Layout         (JS enabled, layout mode)"
+echo "    • Options - labels                (labeled smoke,regression)"
+echo "    • Options - Combined              (multiple options together)"
+echo "    • Options - disableShadowDom      (Shadow DOM disabled)"
+echo ""
+echo "    ${BOLD}Multiple Snapshots (5 snapshots):${NC}"
+echo "    • Multi - Same Page First"
+echo "    • Multi - Same Page Second"
+echo "    • Multi - After DOM Change        (title changed to blue)"
+echo "    • Multi - Second Page"
+echo "    • Multi - Back to First Page"
+echo ""
+echo "    ${BOLD}Sync Mode (3 snapshots):${NC}"
+echo "    • Sync - Non Blocking             (sync: false, validates option key)"
+echo "    • Sync - With Options             (widths + percyCSS combined)"
+echo "    • Sync - Blocking                 (sync: true, blocks until rendered)"
+echo ""
+echo "    ${BOLD}Discovery Options (2 snapshots):${NC}"
+echo "    • Discovery - Allowed Hostnames"
+echo "    • Discovery - Combined            (discovery + widths + CSS)"
 echo ""
 
 pause "Verify baseline on dashboard, then press ENTER to continue"
@@ -321,10 +464,14 @@ echo "  Dashboard:"
 echo "    Baseline : ${BASELINE_BUILD_URL}"
 echo "    Diff     : ${DIFF_BUILD_URL}"
 echo ""
-echo "  Tests Executed (4 Katalon runs, 22 scenarios):"
+echo "  Tests Executed (8 Katalon runs, 39 scenarios):"
 echo "    ✓ Dual Channel Logging    — 3 scenarios (null driver, valid snapshot, wrong mode)"
 echo "    ✓ Responsive Capture      — 3 scenarios (explicit widths, client-side, minHeight)"
 echo "    ✓ All Regions (baseline)  — 8 baseline snapshots"
+echo "    ✓ Snapshot Options        — 7 scenarios (percyCSS, domTransformation, scope, JS, labels, combined, shadowDom)"
+echo "    ✓ Multiple Snapshots      — 5 scenarios (same page, DOM change, navigation, back)"
+echo "    ✓ Sync Mode               — 3 scenarios (non-blocking, with options, blocking sync:true)"
+echo "    ✓ Discovery Options       — 2 scenarios (allowedHostnames, combined)"
 echo "    ✓ All Regions (diff)      — 8 diff snapshots with regions"
 echo ""
 echo -e "  ${GREEN}Done. Review the dashboard links above to confirm all tests passed.${NC}"

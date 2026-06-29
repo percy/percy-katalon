@@ -113,7 +113,60 @@ npx @percy/cli build:approve <build-id>
 npx @percy/cli build:wait --build <build-id>
 ```
 
-## 5. Graceful Degradation
+## 5. Manual Test Suite
+
+The project includes a comprehensive set of manual Katalon test scripts under `katalon-tests/Scripts/`.
+Run them via the orchestrator script or individually in Katalon Studio.
+
+### Orchestrator Script
+
+```bash
+./scripts/run-manual-tests.sh
+```
+
+This script automates Percy CLI start/stop, guides you through running each test in Katalon Studio,
+handles baseline approval, and runs the diff build for regions.
+
+### Available Test Scripts
+
+| Test Script | Snapshots | What It Tests |
+|-------------|-----------|---------------|
+| **Dual Channel Logging** | 1 | Null driver, valid snapshot, screenshot on web mode (error path) |
+| **Responsive Capture** | 3 | Explicit widths, client-side responsive, minHeight |
+| **All Regions Test** | 8 | Ignore (CSS/XPath/bbox), standard, intelliignore, padding (int/map), combined |
+| **Snapshot Options** | 7 | percyCSS, domTransformation, scope, enableJS+layout, labels, combined, disableShadowDom |
+| **Multiple Snapshots** | 5 | Same page (2x), after DOM change, second page, navigate back |
+| **Sync Mode** | 3 | Non-blocking (sync: false), with options, blocking (sync: true) |
+| **Discovery Options** | 2 | allowedHostnames, combined with widths + CSS |
+
+**Total: 29 baseline snapshots + 8 diff snapshots = 37 scenarios across 8 Katalon runs**
+
+### Automated Smoke Test (no Katalon needed)
+
+```bash
+./scripts/run-all-tests.sh
+```
+
+Runs all 7 test groups via `curl` POST to Percy CLI — same payloads the SDK sends but without
+a browser or Katalon Studio. Covers logging, responsive, regions, snapshot options, multiple
+snapshots, sync mode, and discovery options.
+
+### Dashboard Validation (non-region tests)
+
+| Snapshot | What to Check |
+|----------|---------------|
+| `Options - percyCSS` | Purple background, white h1 |
+| `Options - domTransformation` | h1 reads "Transformed Title" |
+| `Options - scope` | Only `<div>` content captured |
+| `Options - labels` | Labels smoke,regression,options-test in metadata |
+| `Options - Combined` | 3 widths (768, 992, 1200), header hidden |
+| `Multi - Same Page First/Second` | Both exist, identical content |
+| `Multi - After DOM Change` | Blue "Modified Title" |
+| `Responsive - Explicit Widths` | 5 widths in width selector |
+| `Responsive - MinHeight` | Screenshot visibly taller (1200px) |
+| `Sync - Blocking` | Snapshot present (confirms sync completed) |
+
+## 6. Graceful Degradation
 
 The plugin **never fails the test**. Guide the user through these scenarios:
 
@@ -125,6 +178,7 @@ The plugin **never fails the test**. Guide the user through these scenarios:
 | Tests pass but no build | PERCY_TOKEN missing | `export PERCY_TOKEN=<token>` |
 | Regions not visible | First build (no baseline) | Approve first build, then run again |
 | Port 5338 in use | Stale process | `lsof -ti:5338 \| xargs kill -9; rm -f ~/.percy/agent-5338.lock` |
+| Sync returns null | Percy CLI too old | Update CLI: `npm i -g @percy/cli@latest` |
 
 ## Environment Variables
 

@@ -20,6 +20,8 @@ import static org.mockito.Mockito.*
 import com.kms.katalon.core.webui.driver.DriverFactory
 import com.kms.katalon.core.util.KeywordUtil
 
+import java.lang.reflect.Field
+
 @TestMethodOrder(MethodOrderer.OrderAnnotation)
 class PercyKeywordsTest {
 
@@ -57,10 +59,21 @@ class PercyKeywordsTest {
         }
 
         server.createContext("/percy/snapshot") { HttpExchange ex ->
+            String reqBody = ""
             if (ex.requestMethod == "POST") {
-                snapshotBodies.add(ex.requestBody.text)
+                reqBody = ex.requestBody.text
+                snapshotBodies.add(reqBody)
             }
-            String resp = '{"success":true}'
+            // Return sync-compatible response when request contains sync option
+            String resp
+            if (reqBody.contains('"sync"')) {
+                // Extract snapshot name from request body for realistic response
+                def nameMatch = reqBody =~ /"name"\s*:\s*"([^"]+)"/
+                String snapName = nameMatch ? nameMatch[0][1] : "unknown"
+                resp = """{"success":true,"data":{"snapshot-name":"${snapName}","status":"success","screenshots":[]}}"""
+            } else {
+                resp = '{"success":true}'
+            }
             byte[] bytes = resp.getBytes("UTF-8")
             ex.sendResponseHeaders(200, bytes.length)
             ex.responseBody.write(bytes)
@@ -451,5 +464,281 @@ class PercyKeywordsTest {
         // Should have logged to Percy CLI
         assertTrue(logBodies.size() >= 1, "Expected at least 1 log message sent to Percy CLI, got ${logBodies.size()}")
         assertTrue(logBodies.any { it.contains("No active WebDriver") }, "Log should mention missing WebDriver")
+    }
+
+    // -------------------------------------------------------------------
+    // Snapshot body field-level assertions
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(24)
+    void testSnapshotBodyContainsSpecificOptionValues() {
+        PercyKeywords.percySnapshot("Options Page", [
+            percyCSS: 'body { background: purple; }',
+            domTransformation: "(doc) => doc.querySelector('body').style.color = 'green';",
+            scope: '#main-content',
+            widths: [768, 992, 1200]
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains('body { background: purple; }'), "Body should contain percyCSS value")
+        assertTrue(body.contains('domTransformation'), "Body should contain domTransformation key")
+        assertTrue(body.contains('#main-content'), "Body should contain scope selector")
+        assertTrue(body.contains('768'), "Body should contain width 768")
+        assertTrue(body.contains('992'), "Body should contain width 992")
+        assertTrue(body.contains('1200'), "Body should contain width 1200")
+    }
+
+    @Test
+    @Order(25)
+    void testSnapshotBodyContainsUrl() {
+        PercyKeywords.percySnapshot("URL Check Page")
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("https://example.com"), "Snapshot body should include the page URL")
+    }
+
+    @Test
+    @Order(26)
+    void testSnapshotBodyContainsEnvironmentInfo() {
+        PercyKeywords.percySnapshot("Env Info Page")
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("percy-java-selenium"), "Body should contain percy-java-selenium environment info")
+    }
+
+    // -------------------------------------------------------------------
+    // Multiple snapshots with distinct names
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(27)
+    void testMultipleSnapshotsOnSamePageHaveDistinctNames() {
+        PercyKeywords.percySnapshot("Multi Snap -- First")
+        PercyKeywords.percySnapshot("Multi Snap -- Second")
+        assertTrue(snapshotBodies.size() >= 2, "Expected at least 2 snapshots")
+        assertTrue(snapshotBodies[0].contains("Multi Snap -- First"), "First body should contain first name")
+        assertTrue(snapshotBodies[1].contains("Multi Snap -- Second"), "Second body should contain second name")
+    }
+
+    // -------------------------------------------------------------------
+    // Sync mode snapshot
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(28)
+    void testSnapshotWithSyncOption() {
+        def result = PercyKeywords.percySnapshot("Sync Snapshot", [sync: true])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains('"sync"'), "Snapshot body should contain sync option")
+    }
+
+    // -------------------------------------------------------------------
+    // Snapshot error on automate session
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(29)
+    void testSnapshotThrowsErrorForAutomateSession() {
+        // First create the Percy instance by taking a normal snapshot
+        PercyKeywords.percySnapshot("Setup Snapshot")
+        snapshotBodies.clear()
+        logMessages.clear()
+
+        // Use reflection to switch sessionType to "automate"
+        Field cachedPercyField = PercyKeywords.getDeclaredField("cachedPercy")
+        cachedPercyField.setAccessible(true)
+        def percyInstance = cachedPercyField.get(null)
+
+        Field sessionTypeField = percyInstance.getClass().getDeclaredField("sessionType")
+        sessionTypeField.setAccessible(true)
+        sessionTypeField.set(percyInstance, "automate")
+
+        // Now snapshot() should fail with the Percy SDK error
+        def result = PercyKeywords.percySnapshot("Should Fail")
+        assertNull(result, "Snapshot should return null when sessionType is automate")
+        assertTrue(logMessages.any { it.contains("snapshot") },
+            "Error log should mention snapshot. Logs: ${logMessages}")
+    }
+
+    // -------------------------------------------------------------------
+    // Screenshot error message validation on web session
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(30)
+    void testScreenshotErrorMessageOnWebSession() {
+        // First create the Percy instance (sessionType = "web" from healthcheck)
+        PercyKeywords.percySnapshot("Setup For Screenshot Test")
+        logMessages.clear()
+
+        // screenshot() on web session should fail and log specific error
+        def result = PercyKeywords.percyScreenshot("Web Screenshot")
+        assertNull(result, "Screenshot should return null on web session")
+        assertTrue(logMessages.any { it.contains("screenshot") || it.contains("Screenshot") },
+            "Error log should mention screenshot. Logs: ${logMessages}")
+    }
+
+    // -------------------------------------------------------------------
+    // Successful automate screenshot
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(31)
+    void testScreenshotAutomateSessionFailsGracefullyWithMockDriver() {
+        // Create Percy instance via a snapshot first
+        PercyKeywords.percySnapshot("Setup Automate")
+        snapshotBodies.clear()
+        logMessages.clear()
+
+        // Switch to automate session type via reflection
+        Field cachedPercyField = PercyKeywords.getDeclaredField("cachedPercy")
+        cachedPercyField.setAccessible(true)
+        def percyInstance = cachedPercyField.get(null)
+
+        Field sessionTypeField = percyInstance.getClass().getDeclaredField("sessionType")
+        sessionTypeField.setAccessible(true)
+        sessionTypeField.set(percyInstance, "automate")
+
+        // screenshot() on automate session needs real BrowserStack RemoteWebDriver
+        // capabilities (session metadata). With a mock driver, it fails gracefully.
+        def result = PercyKeywords.percyScreenshot("Automate Screenshot")
+        assertNull(result, "Screenshot should return null with mock driver (no BrowserStack session)")
+        assertTrue(logMessages.any { it.contains("[percy]") },
+            "Should log error via Katalon. Logs: ${logMessages}")
+    }
+
+    @Test
+    @Order(32)
+    void testScreenshotWithOptionsAutomateSessionFailsGracefullyWithMockDriver() {
+        // Create Percy instance
+        PercyKeywords.percySnapshot("Setup Automate Options")
+        snapshotBodies.clear()
+        logMessages.clear()
+
+        // Switch to automate
+        Field cachedPercyField = PercyKeywords.getDeclaredField("cachedPercy")
+        cachedPercyField.setAccessible(true)
+        def percyInstance = cachedPercyField.get(null)
+
+        Field sessionTypeField = percyInstance.getClass().getDeclaredField("sessionType")
+        sessionTypeField.setAccessible(true)
+        sessionTypeField.set(percyInstance, "automate")
+
+        def result = PercyKeywords.percyScreenshot("Automate With Options", [
+            percyCSS: 'h1 { color: black; }',
+            fullPage: true
+        ])
+        assertNull(result, "Screenshot should return null with mock driver")
+        assertTrue(logMessages.any { it.contains("[percy]") },
+            "Should log error. Logs: ${logMessages}")
+    }
+
+    // -------------------------------------------------------------------
+    // createRegion -- all fields in a single call
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(33)
+    void testCreateRegionAllFields() {
+        def region = PercyKeywords.createRegion([
+            boundingBox: [x: 100, y: 100, width: 200, height: 200],
+            elementXpath: '//div[@id="test"]',
+            elementCSS: '.test-class',
+            padding: 10,
+            algorithm: 'standard',
+            diffSensitivity: 2,
+            imageIgnoreThreshold: 0.2,
+            carouselsEnabled: true,
+            bannersEnabled: false,
+            adsEnabled: true,
+            diffIgnoreThreshold: 0.1
+        ])
+
+        assertNotNull(region)
+
+        // Element selector
+        assertNotNull(region.elementSelector)
+        assertEquals('//div[@id="test"]', region.elementSelector.elementXpath)
+        assertEquals('.test-class', region.elementSelector.elementCSS)
+        assertEquals(100, region.elementSelector.boundingBox.x)
+        assertEquals(200, region.elementSelector.boundingBox.width)
+
+        // Algorithm
+        assertEquals('standard', region.algorithm)
+
+        // Padding (integer expanded to map)
+        assertEquals(10, region.padding.top)
+        assertEquals(10, region.padding.bottom)
+        assertEquals(10, region.padding.left)
+        assertEquals(10, region.padding.right)
+
+        // Configuration
+        assertNotNull(region.configuration)
+        assertEquals(2, region.configuration.diffSensitivity)
+        assertEquals(0.2, region.configuration.imageIgnoreThreshold)
+        assertTrue(region.configuration.carouselsEnabled)
+        assertFalse(region.configuration.bannersEnabled)
+        assertTrue(region.configuration.adsEnabled)
+
+        // Assertion
+        assertNotNull(region.assertion)
+        assertEquals(0.1, region.assertion.diffIgnoreThreshold)
+    }
+
+    // -------------------------------------------------------------------
+    // Snapshot with domTransformation option
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(34)
+    void testSnapshotWithDomTransformation() {
+        String transform = "(documentElement) => documentElement.querySelector('body').style.color = 'green';"
+        PercyKeywords.percySnapshot("DOM Transform Page", [
+            domTransformation: transform
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("domTransformation"), "Body should contain domTransformation key")
+        assertTrue(body.contains("green"), "Body should contain the transformation content")
+    }
+
+    // -------------------------------------------------------------------
+    // Screenshot null driver logging
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(35)
+    void testScreenshotNullDriverLogsError() {
+        driverFactoryMock.when(DriverFactory::getWebDriver).thenReturn(null)
+        logMessages.clear()
+
+        def result = PercyKeywords.percyScreenshot("Null Driver Screenshot")
+        assertNull(result)
+
+        Thread.sleep(500)
+
+        assertTrue(logMessages.any { it.contains("No active WebDriver") },
+            "Should log missing WebDriver for screenshot. Logs: ${logMessages}")
+        assertTrue(logBodies.any { it.contains("No active WebDriver") },
+            "Should also log to Percy CLI. LogBodies: ${logBodies}")
+    }
+
+    // -------------------------------------------------------------------
+    // Snapshot with discovery options (cross-origin iframe support)
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(36)
+    void testSnapshotWithDiscoveryOptions() {
+        PercyKeywords.percySnapshot("CORS Iframe Page", [
+            discovery: [allowedHostnames: ["todomvc.com"]]
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("discovery"), "Body should contain discovery option")
+        assertTrue(body.contains("allowedHostnames"), "Body should contain allowedHostnames")
+        assertTrue(body.contains("todomvc.com"), "Body should contain the allowed hostname")
     }
 }

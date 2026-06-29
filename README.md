@@ -531,9 +531,3 @@ export BROWSERSTACK_ACCESS_KEY=<key>
 ```
 
 See [TESTING.md](TESTING.md) for the complete testing guide.
-
----
-
-## License
-
-MIT
