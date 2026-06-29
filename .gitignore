@@ -19,3 +19,6 @@ Thumbs.db
 # Katalon
 .metadata/
 Temp*.class
+katalon-tests/Libs/S*.groovy
+katalon-tests/settings/internal/
+io/
