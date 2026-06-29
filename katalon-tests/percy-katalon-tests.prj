@@ -7,7 +7,7 @@
    <freeLicense>false</freeLicense>
    <migratedVersion>5.9.0</migratedVersion>
    <pageLoadTimeout>30</pageLoadTimeout>
-   <projectFileLocation>/Users/sudiptasen/project/percy-katalon-smoke-test/percy-katalon-smoke-test.prj</projectFileLocation>
+   <projectFileLocation></projectFileLocation>
    <sourceContent>
       <sourceFolderList>
          <sourceFolderConfiguration/>

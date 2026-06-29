@@ -30,7 +30,6 @@ npm install -g @percy/cli
 Runs 36 tests against a mock Percy CLI server. Covers all plugin features.
 
 ```bash
-cd /Users/sudiptasen/project/percy-katalon
 ./gradlew test
 ```
 
