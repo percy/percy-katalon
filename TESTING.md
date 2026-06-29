@@ -27,7 +27,7 @@ npm install -g @percy/cli
 
 ## 1. Unit Tests (automated, no Katalon needed)
 
-Runs 36 tests against a mock Percy CLI server. Covers all plugin features.
+Runs 55 tests against a mock Percy CLI server. Covers all plugin features.
 
 ```bash
 ./gradlew test
@@ -73,6 +73,25 @@ Runs 36 tests against a mock Percy CLI server. Covers all plugin features.
 | 34 | `testSnapshotWithDomTransformation` | domTransformation option passes through |
 | 35 | `testScreenshotNullDriverLogsError` | Null driver screenshot logs to both channels |
 | 36 | `testSnapshotWithDiscoveryOptions` | discovery.allowedHostnames passes through |
+| 37 | `testSnapshotWithDisableShadowDom` | disableShadowDom key and value in body |
+| 38 | `testSnapshotWithLabelsValue` | Exact labels string value in body |
+| 39 | `testSnapshotWithEnableLayout` | enableLayout key in body |
+| 40 | `testSnapshotWithCombinedOptions` | 6 options (widths, minHeight, percyCSS, scope, enableJS, labels) all in one body |
+| 41 | `testSnapshotWithSyncFalse` | sync: false option passes through |
+| 42 | `testSnapshotWithSyncAndOptions` | sync + widths + percyCSS combined in body |
+| 43 | `testSnapshotSyncReturnsNonNull` | sync: true snapshot is sent to CLI |
+| 44 | `testSnapshotAfterDomChange` | Modified DOM content appears in second snapshot body |
+| 45 | `testSnapshotWithDifferentUrl` | New URL appears in body after navigation |
+| 46 | `testSnapshotAfterNavigateBack` | 3 snapshots across URL changes, all correct |
+| 47 | `testSnapshotWithFiveExplicitWidths` | All 5 widths (320,375,768,1024,1280) in body |
+| 48 | `testSnapshotResponsiveCaptureInBody` | responsiveSnapshotCapture + widths doesn't crash |
+| 49 | `testSnapshotDiscoveryCombinedWithOptions` | discovery + widths + percyCSS combined in body |
+| 50 | `testSuccessfulSnapshotLogsToKatalon` | No error logged on success path |
+| 51 | `testScreenshotWebModeLogsToBothChannels` | screenshot() web mode error in both Katalon + CLI logs |
+| 52 | `testSnapshotBodyContainsXPathIgnoreRegion` | XPath region round-trip through snapshot body |
+| 53 | `testSnapshotBodyContainsBoundingBoxRegion` | BoundingBox region round-trip through snapshot body |
+| 54 | `testSnapshotBodyContainsIntelliignoreRegionConfig` | Intelliignore config (ads, banners) in snapshot body |
+| 55 | `testSnapshotBodyContainsMultipleRegionsWithValues` | 3 regions with algorithms, diffSensitivity, diffIgnoreThreshold in body |
 
 ---
 
@@ -240,7 +259,7 @@ Open in Katalon Studio: File > Open Project > select `katalon-tests` folder.
 
 | Command | What | Time |
 |---------|------|------|
-| `./gradlew test` | 36 unit tests | ~10s |
+| `./gradlew test` | 55 unit tests | ~10s |
 | `./gradlew shadowJar` | Build plugin JAR | ~5s |
 | `./scripts/run-all-tests.sh` | 30 automated smoke tests | ~3min |
 | `./scripts/run-manual-tests.sh` | Interactive Katalon test guide (39 scenarios) | ~10min |

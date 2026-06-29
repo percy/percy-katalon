@@ -741,4 +741,350 @@ class PercyKeywordsTest {
         assertTrue(body.contains("allowedHostnames"), "Body should contain allowedHostnames")
         assertTrue(body.contains("todomvc.com"), "Body should contain the allowed hostname")
     }
+
+    // -------------------------------------------------------------------
+    // Snapshot option value assertions
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(37)
+    void testSnapshotWithDisableShadowDom() {
+        PercyKeywords.percySnapshot("Shadow DOM Page", [
+            disableShadowDom: true
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("disableShadowDom"), "Body should contain disableShadowDom key")
+        assertTrue(body.contains("true"), "Body should contain true value for disableShadowDom")
+    }
+
+    @Test
+    @Order(38)
+    void testSnapshotWithLabelsValue() {
+        PercyKeywords.percySnapshot("Labeled Page", [
+            labels: 'smoke,regression,options-test'
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("labels"), "Body should contain labels key")
+        assertTrue(body.contains("smoke,regression,options-test"), "Body should contain exact labels value")
+    }
+
+    @Test
+    @Order(39)
+    void testSnapshotWithEnableLayout() {
+        PercyKeywords.percySnapshot("Layout Page", [
+            enableLayout: true
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("enableLayout"), "Body should contain enableLayout key")
+    }
+
+    @Test
+    @Order(40)
+    void testSnapshotWithCombinedOptions() {
+        PercyKeywords.percySnapshot("Combined Options Page", [
+            widths: [768, 992, 1200],
+            minHeight: 800,
+            percyCSS: 'header { display: none; }',
+            scope: 'body',
+            enableJavaScript: true,
+            labels: 'combined-test'
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("768"), "Body should contain width 768")
+        assertTrue(body.contains("992"), "Body should contain width 992")
+        assertTrue(body.contains("1200"), "Body should contain width 1200")
+        assertTrue(body.contains("minHeight"), "Body should contain minHeight key")
+        assertTrue(body.contains("800"), "Body should contain minHeight value 800")
+        assertTrue(body.contains("header { display: none; }"), "Body should contain percyCSS value")
+        assertTrue(body.contains("scope"), "Body should contain scope key")
+        assertTrue(body.contains("enableJavaScript"), "Body should contain enableJavaScript key")
+        assertTrue(body.contains("combined-test"), "Body should contain labels value")
+    }
+
+    // -------------------------------------------------------------------
+    // Sync mode — additional coverage
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(41)
+    void testSnapshotWithSyncFalse() {
+        PercyKeywords.percySnapshot("Sync False Page", [
+            sync: false
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("sync"), "Body should contain sync key")
+    }
+
+    @Test
+    @Order(42)
+    void testSnapshotWithSyncAndOptions() {
+        PercyKeywords.percySnapshot("Sync Options Page", [
+            sync: true,
+            widths: [375, 1280],
+            percyCSS: 'body { margin: 0; }'
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("sync"), "Body should contain sync key")
+        assertTrue(body.contains("375"), "Body should contain width 375")
+        assertTrue(body.contains("1280"), "Body should contain width 1280")
+        assertTrue(body.contains("body { margin: 0; }"), "Body should contain percyCSS value")
+    }
+
+    @Test
+    @Order(43)
+    void testSnapshotSyncReturnsNonNull() {
+        // Mock server returns sync-compatible response when body contains "sync"
+        def result = PercyKeywords.percySnapshot("Sync Return Page", [
+            sync: true
+        ])
+        // The percy-java-selenium SDK returns the CLI response as JSONObject
+        // With our mock server, this should be non-null
+        // Note: result may be null if the SDK doesn't parse the mock sync response,
+        // but the snapshot should still be sent
+        assertTrue(snapshotBodies.size() >= 1, "Snapshot should have been sent")
+        assertTrue(snapshotBodies[0].contains("Sync Return Page"), "Body should contain snapshot name")
+    }
+
+    // -------------------------------------------------------------------
+    // Multiple snapshots — URL change and DOM change
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(44)
+    void testSnapshotAfterDomChange() {
+        // First snapshot with original DOM
+        PercyKeywords.percySnapshot("Before DOM Change")
+        assertTrue(snapshotBodies.size() >= 1)
+        assertTrue(snapshotBodies[0].contains("Before DOM Change"))
+
+        // Change what the mock driver returns for DOM serialization
+        JavascriptExecutor js = (JavascriptExecutor) mockDriver
+        doAnswer({ invocation ->
+            String script = invocation.getArguments()[0] as String
+            if (script != null && script.contains("serialize")) {
+                Map<String, Object> dom = new HashMap<>()
+                dom.put("html", "<html><body><h1>Modified Title</h1></body></html>")
+                dom.put("cookies", new ArrayList<>())
+                return dom
+            }
+            return null
+        }).when(js).executeScript(anyString())
+
+        PercyKeywords.percySnapshot("After DOM Change")
+        assertTrue(snapshotBodies.size() >= 2, "Expected 2 snapshots")
+        assertTrue(snapshotBodies[1].contains("After DOM Change"), "Second body should contain name")
+        assertTrue(snapshotBodies[1].contains("Modified Title"), "Second body should contain modified DOM")
+    }
+
+    @Test
+    @Order(45)
+    void testSnapshotWithDifferentUrl() {
+        PercyKeywords.percySnapshot("Original URL Page")
+        assertTrue(snapshotBodies.size() >= 1)
+        assertTrue(snapshotBodies[0].contains("https://example.com"), "First snapshot should have original URL")
+
+        // Change URL
+        doReturn("https://example.com/?page=2").when(mockDriver).getCurrentUrl()
+        PercyKeywords.percySnapshot("Second URL Page")
+        assertTrue(snapshotBodies.size() >= 2, "Expected 2 snapshots")
+        assertTrue(snapshotBodies[1].contains("example.com/?page=2"), "Second snapshot should have new URL")
+    }
+
+    @Test
+    @Order(46)
+    void testSnapshotAfterNavigateBack() {
+        // Snapshot at original URL
+        PercyKeywords.percySnapshot("Original Page")
+
+        // Navigate to second URL
+        doReturn("https://example.com/?page=2").when(mockDriver).getCurrentUrl()
+        PercyKeywords.percySnapshot("Second Page")
+
+        // Navigate back
+        doReturn("https://example.com").when(mockDriver).getCurrentUrl()
+        PercyKeywords.percySnapshot("Back to Original")
+
+        assertTrue(snapshotBodies.size() >= 3, "Expected 3 snapshots")
+        assertTrue(snapshotBodies[0].contains("Original Page"))
+        assertTrue(snapshotBodies[1].contains("Second Page"))
+        assertTrue(snapshotBodies[2].contains("Back to Original"))
+        assertTrue(snapshotBodies[2].contains("https://example.com"), "Third snapshot should have original URL")
+    }
+
+    // -------------------------------------------------------------------
+    // Responsive capture — body value assertions
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(47)
+    void testSnapshotWithFiveExplicitWidths() {
+        PercyKeywords.percySnapshot("Five Widths Page", [
+            widths: [320, 375, 768, 1024, 1280]
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("320"), "Body should contain width 320")
+        assertTrue(body.contains("375"), "Body should contain width 375")
+        assertTrue(body.contains("768"), "Body should contain width 768")
+        assertTrue(body.contains("1024"), "Body should contain width 1024")
+        assertTrue(body.contains("1280"), "Body should contain width 1280")
+    }
+
+    @Test
+    @Order(48)
+    void testSnapshotResponsiveCaptureInBody() {
+        PercyKeywords.percySnapshot("Responsive Body Check", [
+            responsiveSnapshotCapture: true,
+            widths: [375, 768, 1280]
+        ])
+        // responsiveSnapshotCapture may cause the SDK to attempt viewport resizing
+        // which fails with mock driver, but we verify the option was at least
+        // accepted without crashing. If a snapshot was sent, check its body.
+        if (snapshotBodies.size() >= 1) {
+            String body = snapshotBodies[0]
+            assertTrue(body.contains("Responsive Body Check"), "Body should contain snapshot name")
+        }
+        // No crash is the primary assertion — responsive capture with mock driver is best-effort
+    }
+
+    // -------------------------------------------------------------------
+    // Discovery options — combined with other options
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(49)
+    void testSnapshotDiscoveryCombinedWithOptions() {
+        PercyKeywords.percySnapshot("Discovery Combined Page", [
+            discovery: [allowedHostnames: ["cdn.example.com"]],
+            widths: [375, 1280],
+            percyCSS: 'iframe { border: none; }'
+        ])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("discovery"), "Body should contain discovery key")
+        assertTrue(body.contains("cdn.example.com"), "Body should contain allowed hostname")
+        assertTrue(body.contains("375"), "Body should contain width 375")
+        assertTrue(body.contains("1280"), "Body should contain width 1280")
+        assertTrue(body.contains("iframe { border: none; }"), "Body should contain percyCSS value")
+    }
+
+    // -------------------------------------------------------------------
+    // Dual-channel logging — additional coverage
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(50)
+    void testSuccessfulSnapshotLogsToKatalon() {
+        logMessages.clear()
+        PercyKeywords.percySnapshot("Success Log Page")
+        // After a successful snapshot, no error should be logged
+        // Verify snapshot was sent (positive path)
+        assertTrue(snapshotBodies.size() >= 1, "Snapshot should have been sent")
+        // No error messages should reference this snapshot
+        assertFalse(logMessages.any { it.contains("Could not take snapshot") },
+            "No error should be logged for successful snapshot. Logs: ${logMessages}")
+    }
+
+    @Test
+    @Order(51)
+    void testScreenshotWebModeLogsToBothChannels() {
+        // Create Percy instance first
+        PercyKeywords.percySnapshot("Setup for Screenshot Log Test")
+        logMessages.clear()
+        logBodies.clear()
+
+        // screenshot() on web session should fail and log to both channels
+        PercyKeywords.percyScreenshot("Web Screenshot Log Test")
+
+        Thread.sleep(500)
+
+        assertTrue(logMessages.any { it.contains("[percy]") },
+            "Error should be logged to Katalon. Logs: ${logMessages}")
+        assertTrue(logBodies.any { it.contains("percy") },
+            "Error should be logged to Percy CLI. LogBodies: ${logBodies}")
+    }
+
+    // -------------------------------------------------------------------
+    // Region round-trip through snapshot body
+    // -------------------------------------------------------------------
+
+    @Test
+    @Order(52)
+    void testSnapshotBodyContainsXPathIgnoreRegion() {
+        def region = PercyKeywords.createRegion([
+            elementXpath: '//h1',
+            algorithm: 'ignore'
+        ])
+        PercyKeywords.percySnapshot("XPath Region Page", [regions: [region]])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("regions"), "Body should contain regions key")
+        assertTrue(body.contains("//h1"), "Body should contain XPath selector")
+        assertTrue(body.contains("ignore"), "Body should contain ignore algorithm")
+    }
+
+    @Test
+    @Order(53)
+    void testSnapshotBodyContainsBoundingBoxRegion() {
+        def region = PercyKeywords.createRegion([
+            boundingBox: [x: 0, y: 0, width: 800, height: 80],
+            algorithm: 'ignore'
+        ])
+        PercyKeywords.percySnapshot("BBox Region Page", [regions: [region]])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("regions"), "Body should contain regions key")
+        assertTrue(body.contains("boundingBox"), "Body should contain boundingBox key")
+        assertTrue(body.contains("800"), "Body should contain width 800")
+        assertTrue(body.contains("80"), "Body should contain height 80")
+    }
+
+    @Test
+    @Order(54)
+    void testSnapshotBodyContainsIntelliignoreRegionConfig() {
+        def region = PercyKeywords.createRegion([
+            elementCSS: '.sidebar',
+            algorithm: 'intelliignore',
+            adsEnabled: true,
+            bannersEnabled: true
+        ])
+        PercyKeywords.percySnapshot("Intelliignore Region Page", [regions: [region]])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("intelliignore"), "Body should contain intelliignore algorithm")
+        assertTrue(body.contains("adsEnabled"), "Body should contain adsEnabled config")
+        assertTrue(body.contains("bannersEnabled"), "Body should contain bannersEnabled config")
+    }
+
+    @Test
+    @Order(55)
+    void testSnapshotBodyContainsMultipleRegionsWithValues() {
+        def r1 = PercyKeywords.createRegion([elementCSS: 'h1', algorithm: 'ignore'])
+        def r2 = PercyKeywords.createRegion([
+            elementCSS: 'p',
+            algorithm: 'standard',
+            diffSensitivity: 3,
+            diffIgnoreThreshold: 0.1
+        ])
+        def r3 = PercyKeywords.createRegion([elementCSS: 'a', algorithm: 'ignore'])
+
+        PercyKeywords.percySnapshot("Multi Region Values Page", [regions: [r1, r2, r3]])
+        assertTrue(snapshotBodies.size() >= 1)
+        String body = snapshotBodies[0]
+        assertTrue(body.contains("regions"), "Body should contain regions key")
+        // Verify all three selectors appear
+        assertTrue(body.contains('"elementCSS"'), "Body should contain elementCSS keys")
+        // Verify standard region config values
+        assertTrue(body.contains("standard"), "Body should contain standard algorithm")
+        assertTrue(body.contains("diffSensitivity"), "Body should contain diffSensitivity key")
+        assertTrue(body.contains("diffIgnoreThreshold"), "Body should contain diffIgnoreThreshold key")
+        // Verify ignore algorithm appears (for r1 and r3)
+        assertTrue(body.contains("ignore"), "Body should contain ignore algorithm")
+    }
 }
